@@ -26,6 +26,7 @@ node_modules
 .env.production.local
 /.cache
 .parcel-cache
+./contract/neardev
 
 npm-debug.log*
 yarn-debug.log*

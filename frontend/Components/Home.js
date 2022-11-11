@@ -39,6 +39,7 @@ const Home = (props) => {
                   {" "}
                   <Button onClick={() => props.changeCandidates(el)}>
                     Go to Poll
+                    {console.log(el)}
                   </Button>
                 </td>
               </tr>

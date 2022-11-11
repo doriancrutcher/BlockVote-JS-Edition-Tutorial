@@ -25,10 +25,6 @@ import PollingStation from "./Components/PollingStation";
 
 export default function App({ isSignedIn, contractId, wallet }) {
   const callMethod = async (methodName, args = {}) => {
-    console.log(methodName);
-    console.log(args);
-    console.log(contractId);
-    console.log(wallet);
     wallet.callMethod({
       contractId: contractId,
       method: methodName,
@@ -37,8 +33,6 @@ export default function App({ isSignedIn, contractId, wallet }) {
   };
 
   const viewMethod = async (methodName, args = {}) => {
-    console.log(methodName);
-    console.log(args);
     return await wallet.viewMethod({
       contractId: contractId,
       method: methodName,
@@ -53,6 +47,16 @@ export default function App({ isSignedIn, contractId, wallet }) {
   const signOutFun = () => {
     wallet.signOut();
   };
+
+  const changeCandidatesFunction = async (prompt) => {
+    console.log(prompt);
+    let namePair = await viewMethod("getCandidatePair", { prompt: prompt });
+    await localStorage.setItem("Candidate1", namePair[0]);
+    await localStorage.setItem("Candidate2", namePair[1]);
+    await localStorage.setItem("prompt", prompt);
+    window.location.replace(window.location.href + "PollingStation");
+  };
+
   return (
     <Router>
       <Navbar collapseOnSelect expand='lg' bg='dark' variant='dark'>
@@ -73,17 +77,6 @@ export default function App({ isSignedIn, contractId, wallet }) {
           </Navbar.Collapse>
         </Container>
       </Navbar>
-      <Button
-        onClick={() =>
-          callMethod("addToPromptArray", {
-            prompt: "dorian",
-            name1: "name1",
-            name2: "name2",
-          })
-        }
-      >
-        Clear
-      </Button>
 
       <Routes>
         <Route
@@ -93,6 +86,7 @@ export default function App({ isSignedIn, contractId, wallet }) {
               wallet={wallet}
               callMethod={callMethod}
               viewMethod={viewMethod}
+              changeCandidates={changeCandidatesFunction}
             />
           }
         ></Route>

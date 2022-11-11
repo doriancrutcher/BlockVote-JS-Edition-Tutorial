@@ -120,7 +120,11 @@ const NewPoll = (props) => {
       </Row>
 
       <Row style={{ marginTop: "10vh" }}>
-        <Button disabled={false} onClick={sendToBlockChain} variant='primary'>
+        <Button
+          disabled={disableButton}
+          onClick={sendToBlockChain}
+          variant='primary'
+        >
           Submit
         </Button>
         {/* async callMethod({ contractId, method, args = {}, gas = THIRTY_TGAS, deposit = NO_DEPOSIT }) {
@@ -141,28 +145,7 @@ const NewPoll = (props) => {
       ],
     });
   } */}
-        <Button
-          onClick={async () =>
-            await props.callMethod("addUrl", {
-              name: "pie",
-              url: "pip",
-            })
-          }
-        >
-          what
-        </Button>
       </Row>
-      <Button
-        onClick={() =>
-          props.callMethod("addToPromptArray", {
-            prompt: "dohjrian",
-            name1: "name1",
-            name2: "name2",
-          })
-        }
-      >
-        Clear
-      </Button>
     </Container>
   );
 };

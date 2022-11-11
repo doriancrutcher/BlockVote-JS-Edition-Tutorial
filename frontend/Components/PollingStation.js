@@ -11,8 +11,8 @@ const PollingStation = (props) => {
   );
   const [showresults, changeResultsDisplay] = useState(false);
   const [buttonStatus, changeButtonStatus] = useState(false);
-  const [candidate1Votes, changeVote1] = useState("--");
-  const [candidate2Votes, changeVote2] = useState("--");
+  const [candidate1Votes, changeVote1] = useState(0);
+  const [candidate2Votes, changeVote2] = useState(0);
   const [prompt, changePrompt] = useState("--");
 
   const contractId = process.env.CONTRACT_NAME;
@@ -20,22 +20,20 @@ const PollingStation = (props) => {
   useEffect(() => {
     const getInfo = async () => {
       let x = "localStorage";
-      console.log("Who should be our leader?" === localStorage.prompt);
+      console.log("the prompt is", localStorage.prompt);
       // vote count stuff
 
-      return await props.wallet.viewMethod({
-        contractId: this.contractId,
-        method: "getVotes",
-        args: { prompt: "Who Should be Our Leader" },
+      let promptName = localStorage.prompt;
+
+      let voteCount = await props.viewMethod("getVotes", {
+        prompt: promptName,
       });
 
-      let voteCount = await window.contract.get_votes({
-        prompt: "Who should be our leader?",
-      });
+      console.log(voteCount);
       changeVote1(voteCount[0]);
       changeVote2(voteCount[1]);
 
-      // image stuff
+      // // image stuff
 
       changeCandidate1Url(
         await props.viewMethod("getUrl", {
@@ -43,19 +41,20 @@ const PollingStation = (props) => {
         })
       );
       changeCandidate2Url(
-        await props.viewMethod("get_url", {
+        await props.viewMethod("getUrl", {
           name: localStorage.getItem("Candidate2"),
         })
       );
 
       changePrompt(localStorage.getItem("prompt"));
 
-      // vote checking stuff
+      // // vote checking stuff
 
-      let didUserVote = await props.viewMEthod("did_participate", {
+      let didUserVote = await props.viewMethod("didParticipate", {
         prompt: localStorage.getItem("prompt"),
-        user: window.accountId,
+        user: props.wallet.accountId,
       });
+      console.log(didUserVote);
 
       changeResultsDisplay(didUserVote);
       changeButtonStatus(didUserVote);
@@ -66,17 +65,17 @@ const PollingStation = (props) => {
 
   const addVote = async (index) => {
     changeButtonStatus(true);
-    await window.contract.add_vote({
+    await props.callMethod("addVote", {
       prompt: localStorage.getItem("prompt"),
       index: index,
     });
 
-    await window.contract.record_user({
+    await props.callMethod("recordUser", {
       prompt: localStorage.getItem("prompt"),
-      user: window.accountId,
+      user: props.wallet.accountId,
     });
 
-    let voteCount = await window.contract.get_votes({
+    let voteCount = await props.viewMethod("getVotes", {
       prompt: localStorage.getItem("prompt"),
     });
     changeVote1(voteCount[0]);
