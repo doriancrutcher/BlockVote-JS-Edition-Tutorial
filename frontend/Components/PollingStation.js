@@ -56,8 +56,8 @@ const PollingStation = (props) => {
       });
       console.log(didUserVote);
 
-      changeResultsDisplay(didUserVote);
-      changeButtonStatus(didUserVote);
+      await changeResultsDisplay(didUserVote);
+      await changeButtonStatus(didUserVote);
     };
 
     getInfo();
@@ -65,22 +65,32 @@ const PollingStation = (props) => {
 
   const addVote = async (index) => {
     changeButtonStatus(true);
-    await props.callMethod("addVote", {
-      prompt: localStorage.getItem("prompt"),
-      index: index,
-    });
+    let receipt = await props
+      .callMethod("addVote", {
+        prompt: localStorage.getItem("prompt"),
+        index: index,
+      })
+      .then(async () => {
+        await props.callMethod("recordUser", {
+          prompt: localStorage.getItem("prompt"),
+          user: props.wallet.accountId,
+        });
+      })
+      .then(async () => {
+        let voteCount = await props.viewMethod("getVotes", {
+          prompt: localStorage.getItem("prompt"),
+        });
+        return voteCount;
+      })
+      .then((voteCount) => {
+        changeVote1(voteCount[0]);
+        changeVote2(voteCount[1]);
+        console.log(voteCount);
+      });
 
-    await props.callMethod("recordUser", {
-      prompt: localStorage.getItem("prompt"),
-      user: props.wallet.accountId,
-    });
-
-    let voteCount = await props.viewMethod("getVotes", {
-      prompt: localStorage.getItem("prompt"),
-    });
-    changeVote1(voteCount[0]);
-    changeVote2(voteCount[1]);
     changeResultsDisplay(true);
+
+    alert("thanks for voting!");
   };
 
   return (
@@ -127,7 +137,7 @@ const PollingStation = (props) => {
               style={{ marginTop: "5vh" }}
               className='justify-content-center d-flex'
             >
-              <Button disabled={buttonStatus} onClick={() => addVote(0)}>
+              <Button disabled={false} onClick={() => addVote(0)}>
                 Vote
               </Button>
             </Row>
