@@ -137,7 +137,7 @@ const PollingStation = (props) => {
               style={{ marginTop: "5vh" }}
               className='justify-content-center d-flex'
             >
-              <Button disabled={false} onClick={() => addVote(0)}>
+              <Button disabled={buttonStatus} onClick={() => addVote(0)}>
                 Vote
               </Button>
             </Row>

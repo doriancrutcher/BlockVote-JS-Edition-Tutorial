@@ -1,6 +1,6 @@
 import { Near } from "near-api-js";
 import React, { useEffect, useState } from "react";
-import { Table, Container, Button } from "react-bootstrap";
+import { Table, Container, Button, Row } from "react-bootstrap";
 let contractId = process.env.CONTRACT_NAME;
 console.log(contractId);
 
@@ -18,6 +18,11 @@ const Home = (props) => {
     };
     getPrompts();
   }, []);
+
+  const clearPolls = async () => {
+    await props.callMethod("clearPromptArray");
+    location.reload();
+  };
 
   return (
     <Container>
@@ -47,6 +52,18 @@ const Home = (props) => {
           })}
         </tbody>
       </Table>
+      <Row>
+        <Button
+          style={{
+            width: "20vh",
+            marginLeft: "10vh",
+          }}
+          onClick={clearPolls}
+        >
+          {" "}
+          Clear Polls
+        </Button>
+      </Row>
     </Container>
   );
 };
