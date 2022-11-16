@@ -12,7 +12,6 @@ import {
 class HelloNear {
   greeting: string = "Hello";
 
-  candidateUrl = new UnorderedMap<string>("candidateUrl");
   candidatePair = new UnorderedMap<string[]>("candidate_pair");
   promptSet = new UnorderedSet<string>("promptArray");
   voteArray = new UnorderedMap<number[]>("voteArray");
@@ -21,10 +20,9 @@ class HelloNear {
   // Writing View Methods
 
   @view({})
-  getUrl({ name }: { name: string }): string {
-    return this.candidateUrl.get(name, {
-      defaultValue: "no url",
-    });
+  getUrl({ prompt, name }: { prompt: string; name: string }): string {
+    let candidateUrlArray = this.candidatePair.get(prompt);
+    return candidateUrlArray[candidateUrlArray.indexOf(name) + 1];
   }
 
   @view({})
@@ -48,7 +46,10 @@ class HelloNear {
 
   @view({})
   getCandidatePair({ prompt }: { prompt: string }): string[] {
-    return this.candidatePair.get(prompt, { defaultValue: ["n/a,n/a"] });
+    let candidateUrlArray = this.candidatePair.get(prompt, {
+      defaultValue: ["n/a,n/a"],
+    });
+    return [candidateUrlArray[0], candidateUrlArray[2]];
   }
 
   // change methods
@@ -60,26 +61,20 @@ class HelloNear {
   }
 
   @call({})
-  addUrl({ name, url }: { name: string; url: string }) {
-    this.candidateUrl.set(name, url);
-  }
-
-  @call({})
-  linkAdd({ name, link }: { name: string; link: string }) {
-    this.candidateUrl.set(name, link);
-  }
-
-  @call({})
   addCandidatePair({
     prompt,
     name1,
     name2,
+    url1,
+    url2,
   }: {
     prompt: string;
     name1: string;
     name2: string;
+    url1: string;
+    url2: string;
   }) {
-    this.candidatePair.set(prompt, [name1, name2]);
+    this.candidatePair.set(prompt, [name1, url1, name2, url2]);
   }
 
   @call({})
