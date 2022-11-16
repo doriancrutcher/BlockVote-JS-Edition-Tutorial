@@ -108,6 +108,8 @@ class HelloNear {
   recordUser({ prompt, user }: { prompt: string; user: string }) {
     let currentArray = this.userParticipation.get(prompt, { defaultValue: [] });
     currentArray.includes(user) ? null : currentArray.push(user);
-    this.userParticipation.set(prompt, currentArray);
+    if (!currentArray.includes(user)) {
+      currentArray.push(user);
+    }
   }
 }
