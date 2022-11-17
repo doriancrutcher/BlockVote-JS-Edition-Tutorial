@@ -12,10 +12,8 @@ import {
 class VotingContract {
   // Candidate Pair Used to store Candidate Names and URL links
   candidatePair = new UnorderedMap<string[]>("candidate_pair");
-
   // Prompt Set Was used to in an effort to keep track of keys for the candidatePair Unordered Map
   promptSet = new UnorderedSet<string>("promptArray");
-
   voteArray = new UnorderedMap<number[]>("voteArray");
   userParticipation = new UnorderedMap<string[]>("user Participation ");
 
@@ -33,8 +31,13 @@ class VotingContract {
     let promptUserList: string[] = this.userParticipation.get(prompt, {
       defaultValue: [],
     });
-
+    near.log(promptUserList);
     return promptUserList.includes(user);
+  }
+
+  @view({})
+  participateArray({ prompt }: { prompt: string }): string[] {
+    return this.userParticipation.get(prompt);
   }
 
   @view({})
@@ -101,8 +104,6 @@ class VotingContract {
   recordUser({ prompt, user }: { prompt: string; user: string }) {
     let currentArray = this.userParticipation.get(prompt, { defaultValue: [] });
     currentArray.includes(user) ? null : currentArray.push(user);
-    if (!currentArray.includes(user)) {
-      currentArray.push(user);
-    }
+    this.userParticipation.set(prompt, currentArray);
   }
 }

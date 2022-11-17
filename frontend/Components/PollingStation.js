@@ -1,3 +1,4 @@
+import { get } from "http";
 import React, { useState, useEffect } from "react";
 import { Container, Row, Col, Button } from "react-bootstrap";
 // import LoadingCircles from "../assets/loadingcircles.svg";
@@ -62,14 +63,14 @@ const PollingStation = (props) => {
         prompt: localStorage.getItem("prompt"),
         user: props.wallet.accountId,
       });
-      console.log(didUserVote);
+      console.log("did user vote", didUserVote);
 
       await changeResultsDisplay(didUserVote);
       await changeButtonStatus(didUserVote);
     };
 
     getInfo();
-  }, []);
+  }, [showresults]);
 
   const addVote = async (index) => {
     changeButtonStatus(true);
@@ -79,6 +80,8 @@ const PollingStation = (props) => {
         index: index,
       })
       .then(async () => {
+        console.log("recording a prompt", localStorage.getItem("prompt"));
+        console.log("user Account is", props.wallet.accountId);
         await props.callMethod("recordUser", {
           prompt: localStorage.getItem("prompt"),
           user: props.wallet.accountId,
