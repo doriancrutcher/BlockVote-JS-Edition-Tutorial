@@ -19,28 +19,23 @@ const NewPoll = (props) => {
 
     // async callMethod({ contractId, method, args = {}, gas = THIRTY_TGAS, deposit = NO_DEPOSIT })
 
-    await props.callMethod("addUrl", {
-      name: candidateName1.current.value,
-      url: candidateName1URL.current.value,
-    });
-    await props.callMethod("addUrl", {
-      name: candidateName2.current.value,
-      url: candidateName2URL.current.value,
-    });
-
     await props.callMethod("addCandidatePair", {
       prompt: promptRef.current.value,
       name1: candidateName1.current.value,
       name2: candidateName2.current.value,
+      url1: candidateName1URL.current.value,
+      url2: candidateName2URL.current.value,
     });
 
     await props.callMethod("addToPromptArray", {
       prompt: promptRef.current.value,
     });
 
-    await props.callMethod("newVote", { prompt: promptRef.current.value });
-
-    alert("head back to home page");
+    await props
+      .callMethod("initializeVotes", {
+        prompt: promptRef.current.value,
+      })
+      .then(alert("head back to home page"));
   };
 
   return (

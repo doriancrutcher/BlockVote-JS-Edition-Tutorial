@@ -34,14 +34,22 @@ const PollingStation = (props) => {
       changeVote2(voteCount[1]);
 
       // // image stuff
-
+      console.log(
+        "url is ",
+        await props.viewMethod("getUrl", {
+          prompt: localStorage.getItem("prompt"),
+          name: localStorage.getItem("Candidate1"),
+        })
+      );
       changeCandidate1Url(
         await props.viewMethod("getUrl", {
+          prompt: localStorage.getItem("prompt"),
           name: localStorage.getItem("Candidate1"),
         })
       );
       changeCandidate2Url(
         await props.viewMethod("getUrl", {
+          prompt: localStorage.getItem("prompt"),
           name: localStorage.getItem("Candidate2"),
         })
       );

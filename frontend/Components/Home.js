@@ -5,10 +5,7 @@ let contractId = process.env.CONTRACT_NAME;
 console.log(contractId);
 
 const Home = (props) => {
-  const [promptList, changePromptList] = useState([
-    "Which Pokemon is Best?",
-    "Which city is best",
-  ]);
+  const [promptList, changePromptList] = useState([]);
 
   useEffect(() => {
     const getPrompts = async () => {
@@ -16,12 +13,24 @@ const Home = (props) => {
       console.log("output is", output);
       changePromptList(output);
     };
+
     getPrompts();
   }, []);
 
   const clearPolls = async () => {
     await props.callMethod("clearPromptArray");
     location.reload();
+  };
+
+  const getPrompts = async () => {
+    console.log(await props.viewMethod("getAllPrompts"));
+  };
+
+  const addPrompt = async () => {
+    await props.callMethod("addToPromptArray", {
+      prompt: "dorian",
+    });
+    console.log("adding prompt");
   };
 
   return (
@@ -36,19 +45,26 @@ const Home = (props) => {
         </thead>
         <tbody>
           {promptList.map((el, index) => {
-            return (
-              <tr key={index}>
-                <td>{index + 1}</td>
-                <td>{el}</td>
-                <td>
-                  {" "}
-                  <Button onClick={() => props.changeCandidates(el)}>
-                    Go to Poll
-                    {console.log(el)}
-                  </Button>
-                </td>
-              </tr>
-            );
+            console.log(promptList);
+            if (promptList) {
+              return (
+                <tr key={index}>
+                  <td>{index + 1}</td>
+                  <td>{el}</td>
+                  <td>
+                    {" "}
+                    <Button onClick={() => props.changeCandidates(el)}>
+                      Go to Poll
+                      {console.log(el)}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            } else {
+              <tr>
+                <td> no prompts</td>
+              </tr>;
+            }
           })}
         </tbody>
       </Table>
@@ -62,7 +78,7 @@ const Home = (props) => {
         >
           {" "}
           Clear Polls
-        </Button>
+        </Button>{" "}
       </Row>
     </Container>
   );

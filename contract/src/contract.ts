@@ -9,11 +9,13 @@ import {
 } from "near-sdk-js";
 
 @NearBindgen({})
-class HelloNear {
-  greeting: string = "Hello";
-
+class VotingContract {
+  // Candidate Pair Used to store Candidate Names and URL links
   candidatePair = new UnorderedMap<string[]>("candidate_pair");
+
+  // Prompt Set Was used to in an effort to keep track of keys for the candidatePair Unordered Map
   promptSet = new UnorderedSet<string>("promptArray");
+
   voteArray = new UnorderedMap<number[]>("voteArray");
   userParticipation = new UnorderedMap<string[]>("user Participation ");
 
@@ -21,6 +23,7 @@ class HelloNear {
 
   @view({})
   getUrl({ prompt, name }: { prompt: string; name: string }): string {
+    near.log(prompt);
     let candidateUrlArray = this.candidatePair.get(prompt);
     return candidateUrlArray[candidateUrlArray.indexOf(name) + 1];
   }
@@ -52,14 +55,6 @@ class HelloNear {
     return [candidateUrlArray[0], candidateUrlArray[2]];
   }
 
-  // change methods
-  @call({}) // This method changes the state, for which it cost gas
-  set_greeting({ message }: { message: string }): void {
-    // Record a log permanently to the blockchain!
-    near.log(`Saving greeting ${message}`);
-    this.greeting = message;
-  }
-
   @call({})
   addCandidatePair({
     prompt,
@@ -78,7 +73,7 @@ class HelloNear {
   }
 
   @call({})
-  newVote({ prompt }: { prompt: string }) {
+  initializeVotes({ prompt }: { prompt: string }) {
     this.voteArray.set(prompt, [0, 0]);
   }
 
@@ -90,6 +85,9 @@ class HelloNear {
   @call({})
   clearPromptArray() {
     this.promptSet.clear();
+    this.candidatePair.clear();
+    this.userParticipation.clear();
+    this.voteArray.clear();
   }
 
   @call({})
