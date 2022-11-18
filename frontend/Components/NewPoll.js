@@ -11,6 +11,7 @@ const NewPoll = (props) => {
   const promptRef = useRef();
 
   const [disableButton, changeDisable] = useState(false);
+  const [displayMessage, changeDisplayMessage] = useState(false);
 
   const sendToBlockChain = async () => {
     changeDisable(true);
@@ -19,27 +20,48 @@ const NewPoll = (props) => {
 
     // async callMethod({ contractId, method, args = {}, gas = THIRTY_TGAS, deposit = NO_DEPOSIT })
 
-    await props.callMethod("addCandidatePair", {
-      prompt: promptRef.current.value,
-      name1: candidateName1.current.value,
-      name2: candidateName2.current.value,
-      url1: candidateName1URL.current.value,
-      url2: candidateName2URL.current.value,
-    });
-
-    await props.callMethod("addToPromptArray", {
-      prompt: promptRef.current.value,
-    });
-
     await props
-      .callMethod("initializeVotes", {
+      .callMethod("addCandidatePair", {
         prompt: promptRef.current.value,
+        name1: candidateName1.current.value,
+        name2: candidateName2.current.value,
+        url1: candidateName1URL.current.value,
+        url2: candidateName2URL.current.value,
       })
-      .then(alert("head back to home page"));
+      .then(
+        async () =>
+          await props.callMethod("addToPromptArray", {
+            prompt: promptRef.current.value,
+          })
+      )
+      .then(async () => {
+        await props.callMethod("initializeVotes", {
+          prompt: promptRef.current.value,
+        });
+        return false;
+      })
+      .then(async () => {
+        props.changePromptList(await props.getPrompts());
+      });
+  };
+
+  const updatePolls = async () => {
+    await sendToBlockChain().then(changeDisplayMessage(true));
+  };
+
+  const returnToHome = () => {
+    if (displayMessage) {
+      return (
+        <Row className='justify-content-center d-flex'>
+          <Card style={{ width: "20vw" }}>Return to Home Page</Card>
+        </Row>
+      );
+    }
   };
 
   return (
     <Container style={{ marginTop: "10px" }}>
+      {returnToHome()}
       <Row>
         <Card>
           <Card.Body>
@@ -117,7 +139,7 @@ const NewPoll = (props) => {
       <Row style={{ marginTop: "10vh" }}>
         <Button
           disabled={disableButton}
-          onClick={sendToBlockChain}
+          onClick={updatePolls}
           variant='primary'
         >
           Submit

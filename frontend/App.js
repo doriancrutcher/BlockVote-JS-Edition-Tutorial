@@ -1,5 +1,5 @@
 import "regenerator-runtime/runtime";
-import React from "react";
+import React, { useState } from "react";
 
 import {
   BrowserRouter as Router,
@@ -24,6 +24,8 @@ import NewPoll from "./Components/NewPoll";
 import PollingStation from "./Components/PollingStation";
 
 export default function App({ isSignedIn, contractId, wallet }) {
+  const [promptList, changePromptList] = useState([]);
+
   const callMethod = async (methodName, args = {}) => {
     wallet.callMethod({
       contractId: contractId,
@@ -48,6 +50,10 @@ export default function App({ isSignedIn, contractId, wallet }) {
     wallet.signOut();
   };
 
+  const getPrompts = async () => {
+    return await viewMethod("getAllPrompts");
+  };
+
   const displayHome = () => {
     if (isSignedIn) {
       return (
@@ -60,6 +66,9 @@ export default function App({ isSignedIn, contractId, wallet }) {
                 callMethod={callMethod}
                 viewMethod={viewMethod}
                 changeCandidates={changeCandidatesFunction}
+                getPrompts={getPrompts}
+                promptList={promptList}
+                changePromptList={changePromptList}
               />
             }
           ></Route>
@@ -70,6 +79,9 @@ export default function App({ isSignedIn, contractId, wallet }) {
                 wallet={wallet}
                 callMethod={callMethod}
                 viewMethod={viewMethod}
+                getPrompts={getPrompts}
+                promptList={promptList}
+                changePromptList={changePromptList}
               />
             }
           ></Route>
@@ -117,7 +129,7 @@ export default function App({ isSignedIn, contractId, wallet }) {
   return (
     <Router>
       <Navbar collapseOnSelect expand='lg' bg='dark' variant='dark'>
-        {console.log(isSignedIn)}
+        {console.log("contract account is", isSignedIn)}
         <Container>
           <Navbar.Brand href='/'>
             <img src={"https://i.imgur.com/31dvjnh.png"}></img>

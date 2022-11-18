@@ -97,11 +97,12 @@ const PollingStation = (props) => {
         changeVote1(voteCount[0]);
         changeVote2(voteCount[1]);
         console.log(voteCount);
+      })
+      .then(() => {
+        alert("thanks for voting!");
       });
 
     changeResultsDisplay(true);
-
-    alert("thanks for voting!");
   };
 
   return (

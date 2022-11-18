@@ -1,29 +1,29 @@
 import { Near } from "near-api-js";
 import React, { useEffect, useState } from "react";
-import { Table, Container, Button, Row } from "react-bootstrap";
+import { Table, Container, Button, Row, Card } from "react-bootstrap";
+import { async } from "regenerator-runtime";
 let contractId = process.env.CONTRACT_NAME;
 console.log(contractId);
 
 const Home = (props) => {
-  const [promptList, changePromptList] = useState([]);
+  const [disableButton, changeDisableButton] = useState(false);
 
   useEffect(() => {
-    const getPrompts = async () => {
-      let output = await props.viewMethod("getAllPrompts");
-      console.log("output is", output);
-      changePromptList(output);
+    console.log("loading prompts");
+    const getInfo = async () => {
+      let output = await props.getPrompts();
+      props.changePromptList(output);
+      if (output.length === 0) {
+        changeDisableButton(true);
+      }
     };
-
-    getPrompts();
+    getInfo();
   }, []);
 
   const clearPolls = async () => {
     await props.callMethod("clearPromptArray");
-    location.reload();
-  };
-
-  const getPrompts = async () => {
-    console.log(await props.viewMethod("getAllPrompts"));
+    changeDisableButton(true);
+    alert("Please Reload the Page");
   };
 
   const addPrompt = async () => {
@@ -44,9 +44,9 @@ const Home = (props) => {
           </tr>
         </thead>
         <tbody>
-          {promptList.map((el, index) => {
-            console.log(promptList);
-            if (promptList) {
+          {props.promptList.map((el, index) => {
+            console.log(props.promptList);
+            if (props.promptList) {
               return (
                 <tr key={index}>
                   <td>{index + 1}</td>
@@ -68,6 +68,13 @@ const Home = (props) => {
           })}
         </tbody>
       </Table>
+      {
+        <Row className='justify-content-center d-flex'>
+          <Card style={{ width: "20vw", height: "10vh" }}>
+            No Prompts to show
+          </Card>
+        </Row>
+      }
       <Row>
         <Button
           style={{
@@ -75,6 +82,7 @@ const Home = (props) => {
             marginLeft: "10vh",
           }}
           onClick={clearPolls}
+          disabled={disableButton}
         >
           {" "}
           Clear Polls

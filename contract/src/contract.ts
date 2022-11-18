@@ -91,6 +91,7 @@ class VotingContract {
     this.candidatePair.clear();
     this.userParticipation.clear();
     this.voteArray.clear();
+    near.log("clearing polls");
   }
 
   @call({})
