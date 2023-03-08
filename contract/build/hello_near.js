@@ -35,14 +35,6 @@ var TypeBrand;
 })(TypeBrand || (TypeBrand = {}));
 const ERR_INCONSISTENT_STATE = "The collection is an inconsistent state. Did previous smart contract execution terminate unexpectedly?";
 const ERR_INDEX_OUT_OF_BOUNDS = "Index out of bounds";
-function u8ArrayToBytes(array) {
-  return array.reduce((result, value) => `${result}${String.fromCharCode(value)}`, "");
-}
-// TODO this function is a bit broken and the type can't be string
-// TODO for more info: https://github.com/near/near-sdk-js/issues/78
-function bytesToU8Array(bytes) {
-  return Uint8Array.from([...bytes].map(byte => byte.charCodeAt(0)));
-}
 /**
  * Asserts that the expression passed to the function is truthy, otherwise throws a new Error with the provided message.
  *
@@ -57,6 +49,9 @@ function assert(expression, message) {
 function getValueWithOptions(value, options = {
   deserializer: deserialize
 }) {
+  if (value === null) {
+    return options?.defaultValue ?? null;
+  }
   const deserialized = deserialize(value);
   if (deserialized === undefined || deserialized === null) {
     return options?.defaultValue ?? null;
@@ -74,7 +69,7 @@ function serializeValueWithOptions(value, {
   return serializer(value);
 }
 function serialize(valueToSerialize) {
-  return JSON.stringify(valueToSerialize, function (key, value) {
+  return encode(JSON.stringify(valueToSerialize, function (key, value) {
     if (typeof value === "bigint") {
       return {
         value: value.toString(),
@@ -88,10 +83,10 @@ function serialize(valueToSerialize) {
       };
     }
     return value;
-  });
+  }));
 }
 function deserialize(valueToDeserialize) {
-  return JSON.parse(valueToDeserialize, (_, value) => {
+  return JSON.parse(decode(valueToDeserialize), (_, value) => {
     if (value !== null && typeof value === "object" && Object.keys(value).length === 2 && Object.keys(value).every(key => ["value", TYPE_KEY].includes(key))) {
       switch (value[TYPE_KEY]) {
         case TypeBrand.BIGINT:
@@ -103,27 +98,38 @@ function deserialize(valueToDeserialize) {
     return value;
   });
 }
-
 /**
- * A Promise result in near can be one of:
- * - NotReady = 0 - the promise you are specifying is still not ready, not yet failed nor successful.
- * - Successful = 1 - the promise has been successfully executed and you can retrieve the resulting value.
- * - Failed = 2 - the promise execution has failed.
+ * Convert a string to Uint8Array, each character must have a char code between 0-255.
+ * @param s - string that with only Latin1 character to convert
+ * @returns result Uint8Array
  */
-var PromiseResult;
-(function (PromiseResult) {
-  PromiseResult[PromiseResult["NotReady"] = 0] = "NotReady";
-  PromiseResult[PromiseResult["Successful"] = 1] = "Successful";
-  PromiseResult[PromiseResult["Failed"] = 2] = "Failed";
-})(PromiseResult || (PromiseResult = {}));
+function bytes(s) {
+  return env.latin1_string_to_uint8array(s);
+}
 /**
- * A promise error can either be due to the promise failing or not yet being ready.
+ * Convert a Uint8Array to string, each uint8 to the single character of that char code
+ * @param a - Uint8Array to convert
+ * @returns result string
  */
-var PromiseError;
-(function (PromiseError) {
-  PromiseError[PromiseError["Failed"] = 0] = "Failed";
-  PromiseError[PromiseError["NotReady"] = 1] = "NotReady";
-})(PromiseError || (PromiseError = {}));
+function str(a) {
+  return env.uint8array_to_latin1_string(a);
+}
+/**
+ * Encode the string to Uint8Array with UTF-8 encoding
+ * @param s - String to encode
+ * @returns result Uint8Array
+ */
+function encode(s) {
+  return env.utf8_string_to_uint8array(s);
+}
+/**
+ * Decode the Uint8Array to string in UTF-8 encoding
+ * @param a - array to decode
+ * @returns result string
+ */
+function decode(a) {
+  return env.uint8array_to_utf8_string(a);
+}
 
 /*! scure-base - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 function assertNumber(n) {
@@ -445,6 +451,27 @@ var DataLength;
   DataLength[DataLength["SECP256K1"] = 64] = "SECP256K1";
 })(DataLength || (DataLength = {}));
 
+/**
+ * A Promise result in near can be one of:
+ * - NotReady = 0 - the promise you are specifying is still not ready, not yet failed nor successful.
+ * - Successful = 1 - the promise has been successfully executed and you can retrieve the resulting value.
+ * - Failed = 2 - the promise execution has failed.
+ */
+var PromiseResult;
+(function (PromiseResult) {
+  PromiseResult[PromiseResult["NotReady"] = 0] = "NotReady";
+  PromiseResult[PromiseResult["Successful"] = 1] = "Successful";
+  PromiseResult[PromiseResult["Failed"] = 2] = "Failed";
+})(PromiseResult || (PromiseResult = {}));
+/**
+ * A promise error can either be due to the promise failing or not yet being ready.
+ */
+var PromiseError;
+(function (PromiseError) {
+  PromiseError[PromiseError["Failed"] = 0] = "Failed";
+  PromiseError[PromiseError["NotReady"] = 1] = "NotReady";
+})(PromiseError || (PromiseError = {}));
+
 const U64_MAX = 2n ** 64n - 1n;
 const EVICTED_REGISTER = U64_MAX - 1n;
 /**
@@ -470,14 +497,14 @@ function log(...params) {
  */
 function predecessorAccountId() {
   env.predecessor_account_id(0);
-  return env.read_register(0);
+  return str(env.read_register(0));
 }
 /**
  * Returns the account ID of the current contract - the contract that is being executed.
  */
 function currentAccountId() {
   env.current_account_id(0);
-  return env.read_register(0);
+  return str(env.read_register(0));
 }
 /**
  * Returns the amount of NEAR attached to this function call.
@@ -491,7 +518,7 @@ function attachedDeposit() {
  *
  * @param key - The key to read from storage.
  */
-function storageRead(key) {
+function storageReadRaw(key) {
   const returnValue = env.storage_read(key, 0);
   if (returnValue !== 1n) {
     return null;
@@ -499,17 +526,37 @@ function storageRead(key) {
   return env.read_register(0);
 }
 /**
+ * Reads the utf-8 string value from NEAR storage that is stored under the provided key.
+ *
+ * @param key - The utf-8 string key to read from storage.
+ */
+function storageRead(key) {
+  const ret = storageReadRaw(encode(key));
+  if (ret !== null) {
+    return decode(ret);
+  }
+  return null;
+}
+/**
  * Checks for the existance of a value under the provided key in NEAR storage.
  *
  * @param key - The key to check for in storage.
  */
-function storageHasKey(key) {
+function storageHasKeyRaw(key) {
   return env.storage_has_key(key) === 1n;
+}
+/**
+ * Checks for the existance of a value under the provided utf-8 string key in NEAR storage.
+ *
+ * @param key - The utf-8 string key to check for in storage.
+ */
+function storageHasKey(key) {
+  return storageHasKeyRaw(encode(key));
 }
 /**
  * Get the last written or removed value from NEAR storage.
  */
-function storageGetEvicted() {
+function storageGetEvictedRaw() {
   return env.read_register(EVICTED_REGISTER);
 }
 /**
@@ -518,7 +565,7 @@ function storageGetEvicted() {
  * @param key - The key under which to store the value.
  * @param value - The value to store.
  */
-function storageWrite(key, value) {
+function storageWriteRaw(key, value) {
   return env.storage_write(key, value, EVICTED_REGISTER) === 1n;
 }
 /**
@@ -526,90 +573,29 @@ function storageWrite(key, value) {
  *
  * @param key - The key to be removed.
  */
-function storageRemove(key) {
+function storageRemoveRaw(key) {
   return env.storage_remove(key, EVICTED_REGISTER) === 1n;
+}
+/**
+ * Removes the value of the provided utf-8 string key from NEAR storage.
+ *
+ * @param key - The utf-8 string key to be removed.
+ */
+function storageRemove(key) {
+  return storageRemoveRaw(encode(key));
 }
 /**
  * Returns the arguments passed to the current smart contract call.
  */
-function input() {
+function inputRaw() {
   env.input(0);
   return env.read_register(0);
 }
-
 /**
- * Tells the SDK to expose this function as a view function.
- *
- * @param _empty - An empty object.
+ * Returns the arguments passed to the current smart contract call as utf-8 string.
  */
-function view(_empty) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (_target, _key, _descriptor
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  ) {};
-}
-function call({
-  privateFunction = false,
-  payableFunction = false
-}) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function (_target, _key, descriptor) {
-    const originalMethod = descriptor.value;
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    descriptor.value = function (...args) {
-      if (privateFunction && predecessorAccountId() !== currentAccountId()) {
-        throw new Error("Function is private");
-      }
-      if (!payableFunction && attachedDeposit() > 0n) {
-        throw new Error("Function is not payable");
-      }
-      return originalMethod.apply(this, args);
-    };
-  };
-}
-function NearBindgen({
-  requireInit = false,
-  serializer = serialize,
-  deserializer = deserialize
-}) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return target => {
-    return class extends target {
-      static _create() {
-        return new target();
-      }
-      static _getState() {
-        const rawState = storageRead("STATE");
-        return rawState ? this._deserialize(rawState) : null;
-      }
-      static _saveToStorage(objectToSave) {
-        storageWrite("STATE", this._serialize(objectToSave));
-      }
-      static _getArgs() {
-        return JSON.parse(input() || "{}");
-      }
-      static _serialize(value, forReturn = false) {
-        if (forReturn) {
-          return JSON.stringify(value, (_, value) => typeof value === "bigint" ? `${value}` : value);
-        }
-        return serializer(value);
-      }
-      static _deserialize(value) {
-        return deserializer(value);
-      }
-      static _reconstruct(classObject, plainObject) {
-        for (const item in classObject) {
-          const reconstructor = classObject[item].constructor?.reconstruct;
-          classObject[item] = reconstructor ? reconstructor(plainObject[item]) : plainObject[item];
-        }
-        return classObject;
-      }
-      static _requireInit() {
-        return requireInit;
-      }
-    };
-  };
+function input() {
+  return decode(inputRaw());
 }
 
 /**
@@ -639,7 +625,7 @@ class LookupMap {
    */
   get(key, options) {
     const storageKey = this.keyPrefix + key;
-    const value = storageRead(storageKey);
+    const value = storageReadRaw(encode(storageKey));
     return getValueWithOptions(value, options);
   }
   /**
@@ -653,7 +639,7 @@ class LookupMap {
     if (!storageRemove(storageKey)) {
       return options?.defaultValue ?? null;
     }
-    const value = storageGetEvicted();
+    const value = storageGetEvictedRaw();
     return getValueWithOptions(value, options);
   }
   /**
@@ -666,10 +652,10 @@ class LookupMap {
   set(key, newValue, options) {
     const storageKey = this.keyPrefix + key;
     const storageValue = serializeValueWithOptions(newValue, options);
-    if (!storageWrite(storageKey, storageValue)) {
+    if (!storageWriteRaw(encode(storageKey), storageValue)) {
       return options?.defaultValue ?? null;
     }
-    const value = storageGetEvicted();
+    const value = storageGetEvictedRaw();
     return getValueWithOptions(value, options);
   }
   /**
@@ -704,7 +690,7 @@ class LookupMap {
 function indexToKey(prefix, index) {
   const data = new Uint32Array([index]);
   const array = new Uint8Array(data.buffer);
-  const key = u8ArrayToBytes(array);
+  const key = str(array);
   return prefix + key;
 }
 /**
@@ -737,7 +723,7 @@ class Vector {
       return options?.defaultValue ?? null;
     }
     const storageKey = indexToKey(this.prefix, index);
-    const value = storageRead(storageKey);
+    const value = storageReadRaw(bytes(storageKey));
     return getValueWithOptions(value, options);
   }
   /**
@@ -755,8 +741,8 @@ class Vector {
     }
     const key = indexToKey(this.prefix, index);
     const last = this.pop(options);
-    assert(storageWrite(key, serializeValueWithOptions(last, options)), ERR_INCONSISTENT_STATE);
-    const value = storageGetEvicted();
+    assert(storageWriteRaw(bytes(key), serializeValueWithOptions(last, options)), ERR_INCONSISTENT_STATE);
+    const value = storageGetEvictedRaw();
     return getValueWithOptions(value, options);
   }
   /**
@@ -768,7 +754,7 @@ class Vector {
   push(element, options) {
     const key = indexToKey(this.prefix, this.length);
     this.length += 1;
-    storageWrite(key, serializeValueWithOptions(element, options));
+    storageWriteRaw(bytes(key), serializeValueWithOptions(element, options));
   }
   /**
    * Removes and retrieves the element with the highest index.
@@ -782,8 +768,8 @@ class Vector {
     const lastIndex = this.length - 1;
     const lastKey = indexToKey(this.prefix, lastIndex);
     this.length -= 1;
-    assert(storageRemove(lastKey), ERR_INCONSISTENT_STATE);
-    const value = storageGetEvicted();
+    assert(storageRemoveRaw(bytes(lastKey)), ERR_INCONSISTENT_STATE);
+    const value = storageGetEvictedRaw();
     return getValueWithOptions(value, options);
   }
   /**
@@ -796,8 +782,8 @@ class Vector {
   replace(index, element, options) {
     assert(index < this.length, ERR_INDEX_OUT_OF_BOUNDS);
     const key = indexToKey(this.prefix, index);
-    assert(storageWrite(key, serializeValueWithOptions(element, options)), ERR_INCONSISTENT_STATE);
-    const value = storageGetEvicted();
+    assert(storageWriteRaw(bytes(key), serializeValueWithOptions(element, options)), ERR_INCONSISTENT_STATE);
+    const value = storageGetEvictedRaw();
     return getValueWithOptions(value, options);
   }
   /**
@@ -842,7 +828,7 @@ class Vector {
   clear() {
     for (let index = 0; index < this.length; index++) {
       const key = indexToKey(this.prefix, index);
-      storageRemove(key);
+      storageRemoveRaw(bytes(key));
     }
     this.length = 0;
   }
@@ -902,20 +888,20 @@ class UnorderedMap {
    */
   constructor(prefix) {
     this.prefix = prefix;
-    this.keys = new Vector(`${prefix}u`); // intentional different prefix with old UnorderedMap
+    this._keys = new Vector(`${prefix}u`); // intentional different prefix with old UnorderedMap
     this.values = new LookupMap(`${prefix}m`);
   }
   /**
    * The number of elements stored in the collection.
    */
   get length() {
-    return this.keys.length;
+    return this._keys.length;
   }
   /**
    * Checks whether the collection is empty.
    */
   isEmpty() {
-    return this.keys.isEmpty();
+    return this._keys.isEmpty();
   }
   /**
    * Get the data stored at the provided key.
@@ -929,7 +915,7 @@ class UnorderedMap {
       return options?.defaultValue ?? null;
     }
     const [value] = valueAndIndex;
-    return getValueWithOptions(value, options);
+    return getValueWithOptions(encode(value), options);
   }
   /**
    * Store a new value at the provided key.
@@ -943,13 +929,13 @@ class UnorderedMap {
     const serialized = serializeValueWithOptions(value, options);
     if (valueAndIndex === null) {
       const newElementIndex = this.length;
-      this.keys.push(key);
-      this.values.set(key, [serialized, newElementIndex]);
+      this._keys.push(key);
+      this.values.set(key, [decode(serialized), newElementIndex]);
       return null;
     }
     const [oldValue, oldIndex] = valueAndIndex;
-    this.values.set(key, [serialized, oldIndex]);
-    return getValueWithOptions(oldValue, options);
+    this.values.set(key, [decode(serialized), oldIndex]);
+    return getValueWithOptions(encode(oldValue), options);
   }
   /**
    * Removes and retrieves the element with the provided key.
@@ -963,26 +949,26 @@ class UnorderedMap {
       return options?.defaultValue ?? null;
     }
     const [value, index] = oldValueAndIndex;
-    assert(this.keys.swapRemove(index) !== null, ERR_INCONSISTENT_STATE);
+    assert(this._keys.swapRemove(index) !== null, ERR_INCONSISTENT_STATE);
     // the last key is swapped to key[index], the corresponding [value, index] need update
-    if (!this.keys.isEmpty() && index !== this.keys.length) {
+    if (!this._keys.isEmpty() && index !== this._keys.length) {
       // if there is still elements and it was not the last element
-      const swappedKey = this.keys.get(index);
+      const swappedKey = this._keys.get(index);
       const swappedValueAndIndex = this.values.get(swappedKey);
       assert(swappedValueAndIndex !== null, ERR_INCONSISTENT_STATE);
       this.values.set(swappedKey, [swappedValueAndIndex[0], index]);
     }
-    return getValueWithOptions(value, options);
+    return getValueWithOptions(encode(value), options);
   }
   /**
    * Remove all of the elements stored within the collection.
    */
   clear() {
-    for (const key of this.keys) {
+    for (const key of this._keys) {
       // Set instead of remove to avoid loading the value from storage.
       this.values.set(key, null);
     }
-    this.keys.clear();
+    this._keys.clear();
   }
   [Symbol.iterator]() {
     return new UnorderedMapIterator(this);
@@ -1036,11 +1022,27 @@ class UnorderedMap {
   static reconstruct(data) {
     const map = new UnorderedMap(data.prefix);
     // reconstruct keys Vector
-    map.keys = new Vector(`${data.prefix}u`);
-    map.keys.length = data.keys.length;
+    map._keys = new Vector(`${data.prefix}u`);
+    map._keys.length = data._keys.length;
     // reconstruct values LookupMap
     map.values = new LookupMap(`${data.prefix}m`);
     return map;
+  }
+  keys({
+    start,
+    limit
+  }) {
+    const ret = [];
+    if (start === undefined) {
+      start = 0;
+    }
+    if (limit == undefined) {
+      limit = this.length - start;
+    }
+    for (let i = start; i < start + limit; i++) {
+      ret.push(this._keys.get(i));
+    }
+    return ret;
   }
 }
 /**
@@ -1053,7 +1055,7 @@ class UnorderedMapIterator {
    */
   constructor(unorderedMap, options) {
     this.options = options;
-    this.keys = new VectorIterator(unorderedMap.keys);
+    this.keys = new VectorIterator(unorderedMap._keys);
     this.map = unorderedMap.values;
   }
   next() {
@@ -1068,7 +1070,7 @@ class UnorderedMapIterator {
     assert(valueAndIndex !== null, ERR_INCONSISTENT_STATE);
     return {
       done: key.done,
-      value: [key.value, getValueWithOptions(valueAndIndex[0], this.options)]
+      value: [key.value, getValueWithOptions(encode(valueAndIndex[0]), this.options)]
     };
   }
 }
@@ -1076,11 +1078,10 @@ class UnorderedMapIterator {
 function serializeIndex(index) {
   const data = new Uint32Array([index]);
   const array = new Uint8Array(data.buffer);
-  return u8ArrayToBytes(array);
+  return array;
 }
 function deserializeIndex(rawIndex) {
-  const array = bytesToU8Array(rawIndex);
-  const [data] = new Uint32Array(array.buffer);
+  const [data] = new Uint32Array(rawIndex.buffer);
   return data;
 }
 /**
@@ -1093,19 +1094,19 @@ class UnorderedSet {
   constructor(prefix) {
     this.prefix = prefix;
     this.elementIndexPrefix = `${prefix}i`;
-    this.elements = new Vector(`${prefix}e`);
+    this._elements = new Vector(`${prefix}e`);
   }
   /**
    * The number of elements stored in the collection.
    */
   get length() {
-    return this.elements.length;
+    return this._elements.length;
   }
   /**
    * Checks whether the collection is empty.
    */
   isEmpty() {
-    return this.elements.isEmpty();
+    return this._elements.isEmpty();
   }
   /**
    * Checks whether the collection contains the value.
@@ -1131,8 +1132,8 @@ class UnorderedSet {
     }
     const nextIndex = this.length;
     const nextIndexRaw = serializeIndex(nextIndex);
-    storageWrite(indexLookup, nextIndexRaw);
-    this.elements.push(element, options);
+    storageWriteRaw(encode(indexLookup), nextIndexRaw);
+    this._elements.push(element, options);
     return true;
   }
   /**
@@ -1143,7 +1144,7 @@ class UnorderedSet {
    */
   remove(element, options) {
     const indexLookup = this.elementIndexPrefix + serializeValueWithOptions(element, options);
-    const indexRaw = storageRead(indexLookup);
+    const indexRaw = storageReadRaw(encode(indexLookup));
     if (!indexRaw) {
       return false;
     }
@@ -1152,36 +1153,36 @@ class UnorderedSet {
     if (this.length === 1) {
       storageRemove(indexLookup);
       const index = deserializeIndex(indexRaw);
-      this.elements.swapRemove(index);
+      this._elements.swapRemove(index);
       return true;
     }
     // If there is more than one element then swap remove swaps it with the last
     // element.
-    const lastElement = this.elements.get(this.length - 1, options);
+    const lastElement = this._elements.get(this.length - 1, options);
     assert(!!lastElement, ERR_INCONSISTENT_STATE);
     storageRemove(indexLookup);
     // If the removed element was the last element from keys, then we don't need to
     // reinsert the lookup back.
     if (lastElement !== element) {
       const lastLookupElement = this.elementIndexPrefix + serializeValueWithOptions(lastElement, options);
-      storageWrite(lastLookupElement, indexRaw);
+      storageWriteRaw(encode(lastLookupElement), indexRaw);
     }
     const index = deserializeIndex(indexRaw);
-    this.elements.swapRemove(index);
+    this._elements.swapRemove(index);
     return true;
   }
   /**
    * Remove all of the elements stored within the collection.
    */
   clear(options) {
-    for (const element of this.elements) {
+    for (const element of this._elements) {
       const indexLookup = this.elementIndexPrefix + serializeValueWithOptions(element, options);
       storageRemove(indexLookup);
     }
-    this.elements.clear();
+    this._elements.clear();
   }
   [Symbol.iterator]() {
-    return this.elements[Symbol.iterator]();
+    return this._elements[Symbol.iterator]();
   }
   /**
    * Create a iterator on top of the default collection iterator using custom options.
@@ -1190,7 +1191,7 @@ class UnorderedSet {
    */
   createIteratorWithOptions(options) {
     return {
-      [Symbol.iterator]: () => new VectorIterator(this.elements, options)
+      [Symbol.iterator]: () => new VectorIterator(this._elements, options)
     };
   }
   /**
@@ -1233,17 +1234,109 @@ class UnorderedSet {
     const set = new UnorderedSet(data.prefix);
     // reconstruct Vector
     const elementsPrefix = data.prefix + "e";
-    set.elements = new Vector(elementsPrefix);
-    set.elements.length = data.elements.length;
+    set._elements = new Vector(elementsPrefix);
+    set._elements.length = data._elements.length;
     return set;
+  }
+  elements({
+    options,
+    start,
+    limit
+  }) {
+    const ret = [];
+    if (start === undefined) {
+      start = 0;
+    }
+    if (limit == undefined) {
+      limit = this.length - start;
+    }
+    for (let i = start; i < start + limit; i++) {
+      ret.push(this._elements.get(i, options));
+    }
+    return ret;
   }
 }
 
-var _dec, _dec2, _dec3, _dec4, _dec5, _dec6, _dec7, _dec8, _dec9, _dec10, _dec11, _dec12, _dec13, _dec14, _dec15, _class, _class2;
-let HelloNear = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 = view(), _dec5 = view(), _dec6 = view(), _dec7 = call({}), _dec8 = call({}), _dec9 = call({}), _dec10 = call({}), _dec11 = call({}), _dec12 = call({}), _dec13 = call({}), _dec14 = call({}), _dec15 = call({}), _dec(_class = (_class2 = class HelloNear {
-  greeting = "Hello";
-  candidateUrl = new UnorderedMap("candidateUrl");
+/**
+ * Tells the SDK to expose this function as a view function.
+ *
+ * @param _empty - An empty object.
+ */
+function view(_empty) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function (_target, _key, _descriptor
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  ) {};
+}
+function call({
+  privateFunction = false,
+  payableFunction = false
+}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function (_target, _key, descriptor) {
+    const originalMethod = descriptor.value;
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    descriptor.value = function (...args) {
+      if (privateFunction && predecessorAccountId() !== currentAccountId()) {
+        throw new Error("Function is private");
+      }
+      if (!payableFunction && attachedDeposit() > 0n) {
+        throw new Error("Function is not payable");
+      }
+      return originalMethod.apply(this, args);
+    };
+  };
+}
+function NearBindgen({
+  requireInit = false,
+  serializer = serialize,
+  deserializer = deserialize
+}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return target => {
+    return class extends target {
+      static _create() {
+        return new target();
+      }
+      static _getState() {
+        const rawState = storageReadRaw(bytes("STATE"));
+        return rawState ? this._deserialize(rawState) : null;
+      }
+      static _saveToStorage(objectToSave) {
+        storageWriteRaw(bytes("STATE"), this._serialize(objectToSave));
+      }
+      static _getArgs() {
+        return JSON.parse(input() || "{}");
+      }
+      static _serialize(value, forReturn = false) {
+        if (forReturn) {
+          return encode(JSON.stringify(value, (_, value) => typeof value === "bigint" ? `${value}` : value));
+        }
+        return serializer(value);
+      }
+      static _deserialize(value) {
+        return deserializer(value);
+      }
+      static _reconstruct(classObject, plainObject) {
+        for (const item in classObject) {
+          const reconstructor = classObject[item].constructor?.reconstruct;
+          classObject[item] = reconstructor ? reconstructor(plainObject[item]) : plainObject[item];
+        }
+        return classObject;
+      }
+      static _requireInit() {
+        return requireInit;
+      }
+    };
+  };
+}
+
+var _dec, _dec2, _dec3, _dec4, _dec5, _dec6, _dec7, _dec8, _dec9, _dec10, _dec11, _dec12, _dec13, _class, _class2;
+let VotingContract = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 = view(), _dec5 = view(), _dec6 = view(), _dec7 = view(), _dec8 = call({}), _dec9 = call({}), _dec10 = call({}), _dec11 = call({}), _dec12 = call({}), _dec13 = call({}), _dec(_class = (_class2 = class VotingContract {
+  // Candidate Pair Used to store Candidate Names and URL links
   candidatePair = new UnorderedMap("candidate_pair");
+  // Prompt Set Was used to in an effort to keep track of keys for the candidatePair Unordered Map
   promptSet = new UnorderedSet("promptArray");
   voteArray = new UnorderedMap("voteArray");
   userParticipation = new UnorderedMap("user Participation ");
@@ -1251,11 +1344,12 @@ let HelloNear = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 =
   // Writing View Methods
 
   getUrl({
+    prompt,
     name
   }) {
-    return this.candidateUrl.get(name, {
-      defaultValue: "no url"
-    });
+    log(prompt);
+    let candidateUrlArray = this.candidatePair.get(prompt);
+    return candidateUrlArray[candidateUrlArray.indexOf(name) + 1];
   }
   didParticipate({
     prompt,
@@ -1264,7 +1358,13 @@ let HelloNear = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 =
     let promptUserList = this.userParticipation.get(prompt, {
       defaultValue: []
     });
+    log(promptUserList);
     return promptUserList.includes(user);
+  }
+  participateArray({
+    prompt
+  }) {
+    return this.userParticipation.get(prompt);
   }
   getAllPrompts() {
     return this.promptSet.toArray();
@@ -1279,40 +1379,21 @@ let HelloNear = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 =
   getCandidatePair({
     prompt
   }) {
-    return this.candidatePair.get(prompt, {
+    let candidateUrlArray = this.candidatePair.get(prompt, {
       defaultValue: ["n/a,n/a"]
     });
-  }
-
-  // change methods
-  // This method changes the state, for which it cost gas
-  set_greeting({
-    message
-  }) {
-    // Record a log permanently to the blockchain!
-    log(`Saving greeting ${message}`);
-    this.greeting = message;
-  }
-  addUrl({
-    name,
-    url
-  }) {
-    this.candidateUrl.set(name, url);
-  }
-  linkAdd({
-    name,
-    link
-  }) {
-    this.candidateUrl.set(name, link);
+    return [candidateUrlArray[0], candidateUrlArray[2]];
   }
   addCandidatePair({
     prompt,
     name1,
-    name2
+    name2,
+    url1,
+    url2
   }) {
-    this.candidatePair.set(prompt, [name1, name2]);
+    this.candidatePair.set(prompt, [name1, url1, name2, url2]);
   }
-  newVote({
+  initializeVotes({
     prompt
   }) {
     this.voteArray.set(prompt, [0, 0]);
@@ -1324,6 +1405,10 @@ let HelloNear = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 =
   }
   clearPromptArray() {
     this.promptSet.clear();
+    this.candidatePair.clear();
+    this.userParticipation.clear();
+    this.voteArray.clear();
+    log("clearing polls");
   }
   addVote({
     prompt,
@@ -1345,198 +1430,169 @@ let HelloNear = (_dec = NearBindgen({}), _dec2 = view(), _dec3 = view(), _dec4 =
     currentArray.includes(user) ? null : currentArray.push(user);
     this.userParticipation.set(prompt, currentArray);
   }
-}, (_applyDecoratedDescriptor(_class2.prototype, "getUrl", [_dec2], Object.getOwnPropertyDescriptor(_class2.prototype, "getUrl"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "didParticipate", [_dec3], Object.getOwnPropertyDescriptor(_class2.prototype, "didParticipate"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "getAllPrompts", [_dec4], Object.getOwnPropertyDescriptor(_class2.prototype, "getAllPrompts"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "getVotes", [_dec5], Object.getOwnPropertyDescriptor(_class2.prototype, "getVotes"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "getCandidatePair", [_dec6], Object.getOwnPropertyDescriptor(_class2.prototype, "getCandidatePair"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "set_greeting", [_dec7], Object.getOwnPropertyDescriptor(_class2.prototype, "set_greeting"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addUrl", [_dec8], Object.getOwnPropertyDescriptor(_class2.prototype, "addUrl"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "linkAdd", [_dec9], Object.getOwnPropertyDescriptor(_class2.prototype, "linkAdd"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addCandidatePair", [_dec10], Object.getOwnPropertyDescriptor(_class2.prototype, "addCandidatePair"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "newVote", [_dec11], Object.getOwnPropertyDescriptor(_class2.prototype, "newVote"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addToPromptArray", [_dec12], Object.getOwnPropertyDescriptor(_class2.prototype, "addToPromptArray"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "clearPromptArray", [_dec13], Object.getOwnPropertyDescriptor(_class2.prototype, "clearPromptArray"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addVote", [_dec14], Object.getOwnPropertyDescriptor(_class2.prototype, "addVote"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "recordUser", [_dec15], Object.getOwnPropertyDescriptor(_class2.prototype, "recordUser"), _class2.prototype)), _class2)) || _class);
+}, (_applyDecoratedDescriptor(_class2.prototype, "getUrl", [_dec2], Object.getOwnPropertyDescriptor(_class2.prototype, "getUrl"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "didParticipate", [_dec3], Object.getOwnPropertyDescriptor(_class2.prototype, "didParticipate"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "participateArray", [_dec4], Object.getOwnPropertyDescriptor(_class2.prototype, "participateArray"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "getAllPrompts", [_dec5], Object.getOwnPropertyDescriptor(_class2.prototype, "getAllPrompts"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "getVotes", [_dec6], Object.getOwnPropertyDescriptor(_class2.prototype, "getVotes"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "getCandidatePair", [_dec7], Object.getOwnPropertyDescriptor(_class2.prototype, "getCandidatePair"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addCandidatePair", [_dec8], Object.getOwnPropertyDescriptor(_class2.prototype, "addCandidatePair"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "initializeVotes", [_dec9], Object.getOwnPropertyDescriptor(_class2.prototype, "initializeVotes"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addToPromptArray", [_dec10], Object.getOwnPropertyDescriptor(_class2.prototype, "addToPromptArray"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "clearPromptArray", [_dec11], Object.getOwnPropertyDescriptor(_class2.prototype, "clearPromptArray"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "addVote", [_dec12], Object.getOwnPropertyDescriptor(_class2.prototype, "addVote"), _class2.prototype), _applyDecoratedDescriptor(_class2.prototype, "recordUser", [_dec13], Object.getOwnPropertyDescriptor(_class2.prototype, "recordUser"), _class2.prototype)), _class2)) || _class);
 function recordUser() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.recordUser(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  VotingContract._saveToStorage(_contract);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function addVote() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.addVote(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  VotingContract._saveToStorage(_contract);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function clearPromptArray() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.clearPromptArray(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  VotingContract._saveToStorage(_contract);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function addToPromptArray() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.addToPromptArray(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  VotingContract._saveToStorage(_contract);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
-function newVote() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+function initializeVotes() {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
-  const _result = _contract.newVote(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  const _args = VotingContract._getArgs();
+  const _result = _contract.initializeVotes(_args);
+  VotingContract._saveToStorage(_contract);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function addCandidatePair() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.addCandidatePair(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
-}
-function linkAdd() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
-    throw new Error("Contract must be initialized");
-  }
-  const _contract = HelloNear._create();
-  if (_state) {
-    HelloNear._reconstruct(_contract, _state);
-  }
-  const _args = HelloNear._getArgs();
-  const _result = _contract.linkAdd(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
-}
-function addUrl() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
-    throw new Error("Contract must be initialized");
-  }
-  const _contract = HelloNear._create();
-  if (_state) {
-    HelloNear._reconstruct(_contract, _state);
-  }
-  const _args = HelloNear._getArgs();
-  const _result = _contract.addUrl(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
-}
-function set_greeting() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
-    throw new Error("Contract must be initialized");
-  }
-  const _contract = HelloNear._create();
-  if (_state) {
-    HelloNear._reconstruct(_contract, _state);
-  }
-  const _args = HelloNear._getArgs();
-  const _result = _contract.set_greeting(_args);
-  HelloNear._saveToStorage(_contract);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  VotingContract._saveToStorage(_contract);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function getCandidatePair() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.getCandidatePair(_args);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function getVotes() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.getVotes(_args);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function getAllPrompts() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.getAllPrompts(_args);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
+}
+function participateArray() {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
+    throw new Error("Contract must be initialized");
+  }
+  const _contract = VotingContract._create();
+  if (_state) {
+    VotingContract._reconstruct(_contract, _state);
+  }
+  const _args = VotingContract._getArgs();
+  const _result = _contract.participateArray(_args);
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function didParticipate() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.didParticipate(_args);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 function getUrl() {
-  const _state = HelloNear._getState();
-  if (!_state && HelloNear._requireInit()) {
+  const _state = VotingContract._getState();
+  if (!_state && VotingContract._requireInit()) {
     throw new Error("Contract must be initialized");
   }
-  const _contract = HelloNear._create();
+  const _contract = VotingContract._create();
   if (_state) {
-    HelloNear._reconstruct(_contract, _state);
+    VotingContract._reconstruct(_contract, _state);
   }
-  const _args = HelloNear._getArgs();
+  const _args = VotingContract._getArgs();
   const _result = _contract.getUrl(_args);
-  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(HelloNear._serialize(_result, true));
+  if (_result !== undefined) if (_result && _result.constructor && _result.constructor.name === "NearPromise") _result.onReturn();else env.value_return(VotingContract._serialize(_result, true));
 }
 
-export { addCandidatePair, addToPromptArray, addUrl, addVote, clearPromptArray, didParticipate, getAllPrompts, getCandidatePair, getUrl, getVotes, linkAdd, newVote, recordUser, set_greeting };
+export { addCandidatePair, addToPromptArray, addVote, clearPromptArray, didParticipate, getAllPrompts, getCandidatePair, getUrl, getVotes, initializeVotes, participateArray, recordUser };
 //# sourceMappingURL=hello_near.js.map

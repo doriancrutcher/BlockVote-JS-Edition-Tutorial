@@ -1,5 +1,5 @@
 {
-  "name": "blockvote-vote-js-edition",
+  "name": "obv-react",
   "version": "1.0.0",
   "license": "(MIT AND Apache-2.0)",
   "scripts": {
@@ -16,9 +16,5 @@
   "devDependencies": {
     "near-cli": "^3.3.0"
   },
-  "dependencies": {
-    "bootstrap": "^5.2.2",
-    "react-bootstrap": "^2.5.0",
-    "react-router-dom": "^6.4.3"
-  }
+  "dependencies": {}
 }
