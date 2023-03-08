@@ -11,7 +11,8 @@
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "cd contract && npm test",
     "test:integration": "cd integration-tests && npm test -- -- \"./contract/build/hello_near.wasm\"",
-    "postinstall": "cd frontend && npm install && cd .. && cd integration-tests && npm install && cd .. && cd contract && npm install"
+    "postinstall": "cd frontend && npm install && cd .. && cd integration-tests && npm install && cd .. && cd contract && npm install",
+    "install-deps":"cd contract && npm i && cd .. && cd frontend && npm i & cd .. && npm i"
   },
   "devDependencies": {
     "near-cli": "^3.3.0"
